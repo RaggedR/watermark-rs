@@ -1,0 +1,130 @@
+# Anki Import File - Watermark-rs Concepts
+# Import: File > Import, select this file
+# Settings: Fields separated by Tab, Allow HTML in fields
+# Tags will be added automatically based on the deck name
+
+# ============================================
+# CATEGORY 1: Number Theory & Legendre
+# ============================================
+
+What is a <b>quadratic residue</b> modulo prime p?	A number <code>a</code> is a quadratic residue mod p if there exists some x such that: <code>a ≡ x² (mod p)</code><br><br><b>Example (p=7):</b><br>• 1 = 1² mod 7 ✓<br>• 2 = 3² mod 7 (9 mod 7 = 2) ✓<br>• 4 = 2² mod 7 ✓<br>• QRs: {0, 1, 2, 4}<br>• Non-QRs: {3, 5, 6}
+
+What does the <b>Legendre symbol</b> L(a, p) compute?	Determines if <code>a</code> is a quadratic residue mod prime p:<br><br>• L(a,p) = <b>+1</b> if a is a QR (a ≡ x² mod p)<br>• L(a,p) = <b>-1</b> if a is NOT a QR<br>• L(a,p) = <b>0</b> if a ≡ 0 (mod p)<br><br><i>Creates pseudo-random ±1 sequences for watermarking.</i>
+
+Why are <b>Legendre sequences</b> ideal for watermarking?	They have <b>ideal autocorrelation</b>:<br><br>• <b>Sharp peak</b> at shift=0 (perfect self-match)<br>• <b>Near-zero</b> at all other shifts<br><br><b>Benefits:</b><br>1. Easy detection (clear spike)<br>2. Noise averages to zero<br>3. Multiple watermarks don't interfere (low cross-correlation)
+
+How is a 2D Legendre array generated for sequence k?	1. Create 1D Legendre sequence of length p (±1 values based on quadratic residues)<br><br>2. For each column i: compute <code>shift = (i² × k) mod p</code><br><br>3. For each row j: <code>array[j,i] = legendre[(j + shift) mod p]</code><br><br><i>Different k values produce orthogonal watermark families.</i>
+
+# ============================================
+# CATEGORY 2: Frequency Domain (DFT)
+# ============================================
+
+Why embed watermarks in the <b>frequency domain</b> instead of directly in pixels?	Three reasons:<br><br>1. <b>Imperceptibility:</b> Small changes to low frequencies are invisible<br><br>2. <b>Robustness:</b> Low frequencies survive JPEG, blur, noise<br><br>3. <b>Spread spectrum:</b> Energy spreads spatially, defeating local attacks
+
+Why is the watermark placed in region <b>[1..p+1, 1..p+1]</b> and not [0,0] or high frequencies?	<b>[0,0] (DC):</b> Controls average brightness—changes very visible<br><br><b>High frequencies:</b> Destroyed by JPEG, blur, resize<br><br><b>Edges [0,j], [i,0]:</b> Boundary artifacts<br><br><b>[1..p+1, 1..p+1]</b> is the sweet spot: low enough to survive degradation, high enough to be imperceptible.
+
+What does the <code>extract_mark()</code> function return?	A <b>p×p array of real values</b> extracted from the frequency domain:<br><br>1. Convert pixels to complex<br>2. Apply 2D FFT<br>3. Extract region [1..p+1, 1..p+1]<br>4. Return real parts only<br><br><i>This is where the watermark lives.</i>
+
+# ============================================
+# CATEGORY 3: Message Encoding
+# ============================================
+
+How is text message "Hi" converted to a number for embedding?	1. Convert each char to <b>7-bit ASCII</b>:<br>• 'H' = 72 = 0b1001000<br>• 'i' = 105 = 0b1101001<br><br>2. Pack <b>MSB-first</b> into BigInt:<br><code>value = 72 << 7 | 105 = 9321</code><br><br><i>Why 7 bits? Printable ASCII (32-126) fits in 7 bits.</i>
+
+Why encode the message in <b>base p²</b>?	Each Legendre sequence encodes a 2D shift in a p×p array.<br><br>• Total shifts: p × p = <b>p²</b><br>• Bits per sequence: <b>log₂(p²) ≈ 2 × log₂(p)</b><br><br><b>Example (p=593):</b><br>p² = 351,649 shifts ≈ 18.4 bits per sequence<br><br>"Hello" = 35 bits → fits in just 2 sequences!
+
+Given shift value <code>s</code> and array size p×p, how do you compute the 2D shift?	<code>h_shift = s % p</code> (horizontal/column)<br><code>v_shift = s / p</code> (vertical/row)<br><br>Then apply cyclic shift:<br><code>shifted[row][col] = original[(row + v_shift) % p][(col + h_shift) % p]</code><br><br><b>Example (p=7, s=23):</b><br>h_shift = 23 % 7 = 2<br>v_shift = 23 / 7 = 3
+
+# ============================================
+# CATEGORY 4: Embedding Process
+# ============================================
+
+List the 6 main steps to <b>embed</b> a watermark.	1. Find prime: <code>p = largest_prime(min(w,h) - 2)</code><br><br>2. Encode message → BigInt → base-p² shifts<br><br>3. For each shift k: generate Legendre(k), apply 2D shift, scale by strength<br><br>4. Sum all shifted patterns → combined mark (p×p)<br><br>5. 2D DFT of original image<br><br>6. Add mark to [1..p+1, 1..p+1], inverse DFT
+
+What does the <b>strength</b> parameter control?	Multiplies Legendre pattern magnitude before adding to frequencies.<br><br><table><tr><td><b>1-2:</b></td><td>Invisible, may fail heavy JPEG</td></tr><tr><td><b>3-5:</b></td><td>Barely visible, good for most uses</td></tr><tr><td><b>6-10:</b></td><td>Visible artifacts, extreme robustness</td></tr></table><br><b>Trade-off:</b> Higher = more robust but more visible.
+
+Why might you need <b>multiple Legendre sequences</b> (k=1, 2, 3...) for one message?	<b>Capacity limit:</b> Each sequence encodes only log₂(p²) bits.<br><br>For longer messages, use multiple sequences:<br>• Each k uses a <b>different</b> Legendre array<br>• Sequences are <b>orthogonal</b> (don't interfere)<br><br><b>Example:</b> 100-char message = 700 bits<br>With p=100: ~13 bits/seq → need ~54 sequences
+
+# ============================================
+# CATEGORY 5: Detection Process
+# ============================================
+
+What makes watermark detection <b>"blind"</b>?	Recovering the watermark <b>without the original image</b>.<br><br><b>Not needed:</b><br>• Original unwatermarked image<br>• The message (we're finding it!)<br>• Embedding strength<br><br><b>Only needed:</b><br>• Watermarked image<br>• Algorithm knowledge (prime selection, Legendre generation)<br>• Detection threshold
+
+What do you look for after correlating extracted mark with Legendre reference?	A <b>sharp peak</b> in the p×p correlation surface.<br><br><b>Peak position</b> = 2D shift value = encoded message digit<br><br><b>Peak height / RMS</b> = confidence<br><br><i>Should exceed threshold (~4.0) for valid detection.</i>
+
+What is the <b>Peak-to-RMS ratio</b> and how do you interpret it?	<code>peak = max(correlation)</code><br><code>rms = sqrt(mean(correlation² excluding peak))</code><br><code>ratio = peak / rms</code><br><br><table><tr><td>~1:</td><td>Random noise, no watermark</td></tr><tr><td>2-3:</td><td>Weak signal, possibly watermark</td></tr><tr><td>4+:</td><td>Confident detection</td></tr><tr><td>10+:</td><td>Strong, undegraded watermark</td></tr></table>
+
+When does the detection loop <b>stop</b> checking sequences?	When <b>Peak/RMS drops below threshold</b> (typically 4.0).<br><br><b>Why:</b><br>• If sequence k was used → strong peak<br>• If NOT used → random correlation ≈ 1.0<br><br>First "no signal" means all remaining sequences unused → message fully decoded → stop.
+
+# ============================================
+# CATEGORY 6: Robustness
+# ============================================
+
+Why does the watermark <b>survive JPEG compression</b>?	JPEG destroys <b>high frequencies</b>:<br><br>1. DCT quantization zeros high-freq coefficients<br>2. <b>Low frequencies preserved</b> (carry visual info)<br>3. Watermark lives in low frequencies!<br><br><b>Limit:</b> Extreme compression (quality < 30) affects low frequencies too.
+
+Why does <b>Gaussian blur</b> not destroy the watermark?	Blur = <b>low-pass filter</b> in frequency domain.<br><br>• Removes high frequencies (edges, details)<br>• <b>Preserves low frequencies</b> where watermark lives<br><br><b>Limit:</b> Extreme blur (σ > 5) attenuates even low frequencies.
+
+What happens to the watermark when image is <b>resized to 50%</b>?	Prime p is <b>recalculated</b> for new dimensions.<br><br>800×600 → p = 593<br>400×300 → p = 293<br><br>• Frequency domain shrinks proportionally<br>• Watermark region shrinks too<br>• Pattern mostly preserved for moderate resize<br><br><i>Challenge: Different p values don't match exactly.</i>
+
+Name 4 attacks that <b>WILL destroy</b> the watermark.	1. <b>Rotation</b> (even small angles) — DFT changes dramatically<br><br>2. <b>Extreme JPEG</b> (quality < 30) — low frequencies quantized<br><br>3. <b>Severe cropping</b> (< 50%) — not enough frequency info<br><br>4. <b>Geometric distortion</b> (perspective, warping) — frequency relationships destroyed
+
+# ============================================
+# CATEGORY 7: Implementation Details
+# ============================================
+
+How is prime <b>p</b> chosen, and why subtract 2?	<code>p = largest_prime(min(width, height) - 2)</code><br><br><b>Why min(w,h):</b> Watermark must fit both dimensions<br><br><b>Why -2:</b><br>• Leaves room for DC at [0,0]<br>• Avoids boundary effects at [0,j], [i,0]<br>• Watermark goes in [1..p+1, 1..p+1]<br><br><b>Example:</b> 800×600 → min=600 → 598 → p=593
+
+Write the formula for <b>FFT-based correlation</b>. Why is it faster?	<code>correlation(a, b) = IFFT( FFT(a) × conj(FFT(b)) )</code><br><br><b>Speed:</b><br>• Naive: O(n²)<br>• FFT: O(n log n)<br><br>For p=593 (p²≈350k elements):<br>Naive: ~122B ops<br>FFT: ~6M ops<br><b>20,000× faster!</b>
+
+Why use <b>arbitrary-precision integers</b> (BigUint) for messages?	Messages can be arbitrarily long.<br><br>"0xDEADBEEF1234567890ABCDEF:42" = 203 bits<br>• u64 max = 64 bits ❌<br>• u128 max = 128 bits ❌<br><br><code>num_bigint::BigUint</code> handles any size.<br><br><i>Matches C++ boost::multiprecision::cpp_int</i>
+
+How are <b>color images</b> watermarked?	Convert to <b>HSV</b>, watermark only <b>V (Value)</b> channel.<br><br>RGB → HSV<br>• H: Hue (unchanged)<br>• S: Saturation (unchanged)<br>• <b>V: Value ← WATERMARK</b><br>HSV → RGB<br><br><i>Human vision more sensitive to hue/saturation changes than brightness.</i>
+
+# ============================================
+# CATEGORY 8: Analysis Metrics
+# ============================================
+
+What image properties make a watermark more <b>"hideable"</b>?	High hideability = artifacts blend in.<br><br><table><tr><td><b>High texture</b></td><td>Noise masks artifacts</td></tr><tr><td><b>High entropy</b></td><td>Complex patterns hide changes</td></tr><tr><td><b>Many edges</b></td><td>Edges tolerate distortion</td></tr><tr><td><b>Mid-range intensity</b></td><td>No clipping</td></tr></table><br><i>Formula: 0.3×variance + 0.3×entropy + 0.2×edges + 0.2×intensity</i>
+
+What image properties predict better watermark <b>robustness</b>?	High robustness = survives attacks.<br><br><table><tr><td><b>Low spectral flatness</b></td><td>Concentrated energy → clean peaks</td></tr><tr><td><b>Low low-freq ratio</b></td><td>Less interference in watermark band</td></tr><tr><td><b>High watermark SNR</b></td><td>Clean region for embedding</td></tr></table><br><i>Images with "structured" frequency content work best.</i>
+
+What is <b>spectral flatness</b> and what do values 0 vs 1 mean?	<code>flatness = geometric_mean(spectrum) / arithmetic_mean(spectrum)</code><br><br><table><tr><td><b>≈ 0:</b></td><td>Concentrated peaks (tonal, structured) — <b>good!</b></td></tr><tr><td><b>≈ 1:</b></td><td>Flat/uniform (noise-like) — <b>bad</b></td></tr></table><br><i>Natural images typically have low flatness.</i>
+
+# ============================================
+# CATEGORY 9: Module Quick Reference
+# ============================================
+
+What does <b>legendre.rs</b> do?	Generates p×p Legendre arrays for a given sequence number k.<br><br>Key function: <code>generate_array(p, k) → Vec<Vec<f64>></code><br><br><i>Uses quadratic residues to create pseudo-random ±1 patterns with ideal autocorrelation.</i>
+
+What does <b>dft.rs</b> do?	2D FFT operations and watermark region extraction.<br><br>Key function: <code>extract_mark(pixels) → p×p array</code><br><br><i>Transforms spatial pixels to frequency domain and extracts the [1..p+1, 1..p+1] region.</i>
+
+What does <b>correlation.rs</b> do?	FFT-based 2D cross-correlation.<br><br>Key struct: <code>Correlator2D</code> (caches FFT plans)<br>Key method: <code>correlate(a, b) → correlation surface</code><br><br><i>Used in detection to find shift values by locating correlation peaks.</i>
+
+What does <b>embedding.rs</b> do?	Encodes message and embeds watermark into image.<br><br>Key function: <code>embed_watermark(pixels, message, strength) → watermarked pixels</code><br><br><i>Handles ASCII packing, base-p² encoding, Legendre generation, and frequency domain insertion.</i>
+
+What does <b>detection.rs</b> do?	Blind watermark detection and message recovery.<br><br>Key function: <code>detect_blind(pixels, threshold) → DetectionResult</code><br><br><i>Extracts mark, correlates with references, finds peaks, decodes shifts to original message.</i>
+
+# ============================================
+# CATEGORY 10: CLI Commands
+# ============================================
+
+How do you <b>embed</b> a watermark using the CLI?	<code>embed input.png output.png "message" --strength 2.0</code><br><br>Options:<br>• <code>--strength</code>: Pattern magnitude (default 2.0)<br>• <code>--color</code>: Embed in HSV V-channel
+
+How do you <b>detect</b> a watermark using the CLI?	<code>detect image.png --threshold 4.0</code><br><br>• Returns message if found<br>• Exit code 0 if detected, 1 otherwise<br>• <code>--max-sequences</code>: Limit search (default 100)
+
+How do you <b>analyze</b> an image's watermarking suitability?	<code>analyze image.png --json</code><br><br>Shows:<br>• Hideability score (visibility prediction)<br>• Robustness score (survival prediction)<br>• Texture metrics (variance, entropy, edges)<br>• Frequency metrics (flatness, low-freq ratio)
+
+How do you test watermark <b>robustness</b> against degradations?	<code>degrade input.png output.png jpeg 75</code><br><code>degrade input.png output.png blur 2.0</code><br><code>degrade input.png outputs/ all</code> (21 degradations)<br><br>Types: jpeg, resize, crop, blur, noise, brightness, rotate
+
+# ============================================
+# CATEGORY 11: Debugging & Edge Cases
+# ============================================
+
+Detection returns <b>garbage characters</b>. What's likely wrong?	Possible causes:<br><br>1. <b>Wrong prime</b> — image resized, different p calculated<br><br>2. <b>Encoding mismatch</b> — 7-bit vs 8-bit ASCII<br><br>3. <b>Threshold too low</b> — detecting noise as signal<br><br>4. <b>Wrong sequence order</b> — LSB/MSB confusion
+
+Watermark <b>visible in sky/flat regions</b>. How to fix?	1. <b>Reduce strength</b> to 1.0-1.5<br><br>2. Use <code>analyze</code> to check hideability score<br><br>3. Consider adaptive strength based on local texture<br><br><i>Flat regions have low texture to mask artifacts.</i>
+
+Detection works on original but <b>fails after JPEG 85</b>. What helps?	1. <b>Increase strength</b> to 3-4 during embedding<br><br>2. Verify with strength=8 to confirm it's robustness issue<br><br>3. Check if image has low robustness score (high spectral flatness)<br><br><i>Trade-off: Higher strength = more visible but more robust.</i>
+
+What's the <b>maximum message length</b> for a given image?	Depends on p and max_sequences:<br><br>• p = largest_prime(min(w,h) - 2)<br>• Bits per sequence ≈ log₂(p²) = 2 × log₂(p)<br>• Max chars ≈ (sequences × 2 × log₂(p)) / 7<br><br><b>Example (1920×1080, 10 seq):</b><br>p ≈ 1069 → ~20 bits/seq → 200 bits → ~28 chars

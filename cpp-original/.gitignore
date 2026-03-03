@@ -1,0 +1,6 @@
+# Build artifacts
+build/
+
+# IDE files
+.vscode/
+*.swp

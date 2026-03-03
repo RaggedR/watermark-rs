@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Neural network weights and training data
+neural/weights/
+neural/data/
+*.pth
+*.onnx
+
+# C++ build artifacts
+cpp-original/build/
+
+# Test output
+*.csv
+!quick_test.csv
+
+# OS
+.DS_Store
