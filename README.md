@@ -25,5 +25,24 @@ cargo build --release
 python test_suite.py
 ```
 
+## Results
+
+Robustness of the classical (Rust) detector against common attacks
+(full details and methodology in [ATTACKS.md](ATTACKS.md)):
+
+| Attack | Threshold | Status |
+|--------|-----------|--------|
+| JPEG compression | Q ≥ 70 | ✅ Robust |
+| Rotation (with pilot signal) | ±5.0° | ✅ Robust |
+| Rotation (no pilot) | ±0.05° | ⚠️ Fragile |
+| Scaling up | ≤ 110% | ✅ Robust |
+| Scaling down | ≥ 99% | ⚠️ Fragile |
+| Cropping | ≤ 10% | ✅ Robust |
+| Shearing | ≥ 1% | ❌ Fails |
+| Ring attack | ≥ ±0.06° | ❌ Fails |
+
+The neural recovery pipeline in `neural/` targets the failing cases
+(resize + recompression as applied by social platforms).
+
 ## License
 MIT

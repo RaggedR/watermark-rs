@@ -80,4 +80,16 @@ mod tests {
         assert_eq!(arr[35], -1.0); // legendre[5] = -1
         assert_eq!(arr[42], -1.0); // legendre[6] = -1
     }
+
+    #[test]
+    fn test_autocorrelation_dominates_cross_correlation() {
+        let p = 11;
+        let arr1 = generate_array(p, 1);
+        let arr2 = generate_array(p, 2);
+        // All entries are ±1, so self-correlation is exactly p²
+        let autocorr: f64 = arr1.iter().zip(arr1.iter()).map(|(a, b)| a * b).sum();
+        let crosscorr: f64 = arr1.iter().zip(arr2.iter()).map(|(a, b)| a * b).sum::<f64>().abs();
+        assert_eq!(autocorr, (p * p) as f64);
+        assert!(crosscorr < autocorr);
+    }
 }

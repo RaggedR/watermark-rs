@@ -58,14 +58,13 @@ rsync -avz user@other-machine:~/artwork ~/data/artwork
 ### 2. Install Dependencies
 
 ```bash
-cd /Users/robin/git/NFTmarket/watermark-rs/neural
+cd neural
 pip install -r requirements.txt
 ```
 
 ### 3. Build Rust Binaries
 
 ```bash
-cd /Users/robin/git/NFTmarket/watermark-rs
 cargo build --release
 ```
 
